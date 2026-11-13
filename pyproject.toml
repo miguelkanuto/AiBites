@@ -14,3 +14,8 @@ dependencies = [
     "python-dotenv>=1.2.2",
     "sqlalchemy>=2.0.55",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]
