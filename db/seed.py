@@ -12,11 +12,18 @@ import random
 from datetime import date, timedelta
 from pathlib import Path
 
+import sys
+
 import psycopg2
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 SCHEMA_PATH = BASE_DIR / "db" / "schema.sql"
+
+sys.path.insert(0, str(BASE_DIR / "src"))
+from auth import hash_password  # noqa: E402
+
+DEMO_PASSWORD = "demo123"  # senha única das contas fictícias de demonstração
 
 # (produto_id, nome, categoria, marca, preço, estoque, descrição)
 PRODUTOS = [
@@ -100,6 +107,45 @@ VENDAS_ORIGINAIS = [
     (20, date(2026, 1, 24), "P019", "V002", 2),
 ]
 
+DOMINIO = "loja-exemplo.com.br"
+
+SALARIOS_VENDEDORES = {
+    "V001": 14500.00, "V002": 10200.00, "V003": 6900.00, "V004": 6700.00,
+    "V005": 10800.00, "V006": 4400.00, "V007": 7000.00, "V008": 4300.00,
+    "V009": 11200.00, "V010": 6600.00,
+}
+
+# (funcionario_id, nome, email, cargo, departamento, salário, admissão, gerente, vendedor)
+# A ordem importa: o gerente precisa existir antes de quem responde a ele.
+FUNCIONARIOS = [
+    ("F014", "Helena Vasconcelos", f"helena.vasconcelos@{DOMINIO}", "CEO", "Diretoria", 62000.00, date(2015, 1, 12), None, None),
+    ("F011", "Marcos Teixeira", f"marcos.teixeira@{DOMINIO}", "Gerente de Vendas", "Vendas", 18500.00, date(2019, 5, 6), "F014", None),
+    ("F012", "Juliana Prado", f"juliana.prado@{DOMINIO}", "Analista de RH", "Recursos Humanos", 9800.00, date(2021, 2, 15), "F014", None),
+    ("F013", "Rodrigo Campos", f"rodrigo.campos@{DOMINIO}", "Analista de TI", "Tecnologia", 10200.00, date(2020, 9, 1), "F014", None),
+    *[
+        (f"F{int(vendedor[0][1:]):03d}", vendedor[1], vendedor[2], vendedor[4], "Vendas",
+         SALARIOS_VENDEDORES[vendedor[0]], vendedor[5], "F011", vendedor[0])
+        for vendedor in VENDEDORES
+    ],
+]
+
+CLIENTES = [
+    ("C001", "Paulo Mendes", f"paulo.mendes@mendes-informatica.com.br", "Mendes Informática"),
+    ("C002", "Larissa Costa", f"larissa.costa@costa-filhos.com.br", "Costa & Filhos"),
+    ("C003", "Diego Ramos", f"diego.ramos@techsolutions-exemplo.com.br", "Tech Solutions"),
+]
+
+# (usuario_id, email, nome, papel, funcionario_id, cliente_id)
+USUARIOS = [
+    ("U001", f"carlos.lima@{DOMINIO}", "Carlos Lima", "vendedor", "F002", None),
+    ("U002", f"rafael.martins@{DOMINIO}", "Rafael Martins", "vendedor", "F006", None),
+    ("U003", f"marcos.teixeira@{DOMINIO}", "Marcos Teixeira", "gerente_vendas", "F011", None),
+    ("U004", f"juliana.prado@{DOMINIO}", "Juliana Prado", "rh", "F012", None),
+    ("U005", f"rodrigo.campos@{DOMINIO}", "Rodrigo Campos", "ti", "F013", None),
+    ("U006", f"helena.vasconcelos@{DOMINIO}", "Helena Vasconcelos", "ceo", "F014", None),
+    ("U007", "paulo.mendes@mendes-informatica.com.br", "Paulo Mendes", "cliente", None, "C001"),
+]
+
 TOTAL_VENDAS = 500
 FORMAS_PAGAMENTO = ["Cartão de crédito", "Pix", "Boleto", "Cartão de débito"]
 
@@ -143,7 +189,9 @@ def main() -> None:
 
     with psycopg2.connect(database_url) as conexao, conexao.cursor() as cursor:
         cursor.execute(SCHEMA_PATH.read_text(encoding="utf-8"))
-        cursor.execute("TRUNCATE vendas, produtos, vendedores")
+        cursor.execute(
+            "TRUNCATE usuarios, clientes, funcionarios, vendas, produtos, vendedores"
+        )
         cursor.executemany(
             "INSERT INTO produtos (produto_id, nome, categoria, marca, preco_unitario, estoque, descricao) "
             "VALUES (%s, %s, %s, %s, %s, %s, %s)",
@@ -160,8 +208,26 @@ def main() -> None:
             "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
             vendas,
         )
+        cursor.executemany(
+            "INSERT INTO funcionarios (funcionario_id, nome, email, cargo, departamento, salario, "
+            "data_admissao, gerente_id, vendedor_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            FUNCIONARIOS,
+        )
+        cursor.executemany(
+            "INSERT INTO clientes (cliente_id, nome, email, empresa) VALUES (%s, %s, %s, %s)",
+            CLIENTES,
+        )
+        cursor.executemany(
+            "INSERT INTO usuarios (usuario_id, email, nome, papel, funcionario_id, cliente_id, senha_hash) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+            [(*usuario, hash_password(DEMO_PASSWORD)) for usuario in USUARIOS],
+        )
 
-    print(f"Banco populado: {len(PRODUTOS)} produtos, {len(VENDEDORES)} vendedores, {len(vendas)} vendas.")
+    print(
+        f"Banco populado: {len(PRODUTOS)} produtos, {len(VENDEDORES)} vendedores, "
+        f"{len(vendas)} vendas, {len(FUNCIONARIOS)} funcionários, {len(CLIENTES)} clientes, "
+        f"{len(USUARIOS)} contas de login (senha de demonstração: {DEMO_PASSWORD})."
+    )
 
 
 if __name__ == "__main__":

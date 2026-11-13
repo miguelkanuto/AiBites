@@ -34,6 +34,43 @@ CREATE TABLE IF NOT EXISTS vendas (
     status          TEXT NOT NULL
 );
 
+-- Dados de RH: acesso restrito (ver src/rbac.py).
+CREATE TABLE IF NOT EXISTS funcionarios (
+    funcionario_id  TEXT PRIMARY KEY,
+    nome            TEXT NOT NULL,
+    email           TEXT NOT NULL UNIQUE,
+    cargo           TEXT NOT NULL,
+    departamento    TEXT NOT NULL,
+    salario         NUMERIC(12, 2) NOT NULL CHECK (salario > 0),
+    data_admissao   DATE NOT NULL,
+    gerente_id      TEXT REFERENCES funcionarios (funcionario_id),
+    vendedor_id     TEXT UNIQUE REFERENCES vendedores (vendedor_id)
+);
+
+CREATE TABLE IF NOT EXISTS clientes (
+    cliente_id      TEXT PRIMARY KEY,
+    nome            TEXT NOT NULL,
+    email           TEXT NOT NULL UNIQUE,
+    empresa         TEXT NOT NULL
+);
+
+-- Contas de login (fictícias). Funcionário e cliente são mutuamente exclusivos.
+CREATE TABLE IF NOT EXISTS usuarios (
+    usuario_id      TEXT PRIMARY KEY,
+    email           TEXT NOT NULL UNIQUE,
+    nome            TEXT NOT NULL,
+    papel           TEXT NOT NULL
+                    CHECK (papel IN ('cliente', 'vendedor', 'ti', 'gerente_vendas', 'rh', 'ceo')),
+    funcionario_id  TEXT REFERENCES funcionarios (funcionario_id),
+    cliente_id      TEXT REFERENCES clientes (cliente_id),
+    senha_hash      TEXT NOT NULL,
+    ativo           BOOLEAN NOT NULL DEFAULT TRUE,
+    CHECK (
+        (papel = 'cliente' AND cliente_id IS NOT NULL AND funcionario_id IS NULL)
+        OR (papel <> 'cliente' AND funcionario_id IS NOT NULL AND cliente_id IS NULL)
+    )
+);
+
 CREATE INDEX IF NOT EXISTS idx_vendas_produto ON vendas (produto_id);
 CREATE INDEX IF NOT EXISTS idx_vendas_vendedor ON vendas (vendedor_id);
 CREATE INDEX IF NOT EXISTS idx_vendas_data ON vendas (data_venda);
