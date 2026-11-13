@@ -1,14 +1,13 @@
-# Welcome to Chainlit! 🚀🤖
+# AiBites
 
-Hi there, Developer! 👋 We're excited to have you on board. Chainlit is a powerful tool designed to help you prototype, debug and share applications built on top of LLMs.
+Aqui é a **Carol**, assistente da AiBites. Eu consulto a base de vendas da empresa: produtos, vendedores e vendas.
 
-## Useful Links 🔗
+## O que perguntar
 
-- **Documentation:** Get started with our comprehensive [Chainlit Documentation](https://docs.chainlit.io) 📚
-- **Discord Community:** Join our friendly [Chainlit Discord](https://discord.gg/k73SQ3FyUh) to ask questions, share your projects, and connect with other developers! 💬
+- "Qual o valor do notebook Dell?"
+- "Quais produtos da categoria Redes temos?"
+- "Quem trabalha na região Norte?"
 
-We can't wait to see what you create with Chainlit! Happy coding! 💻😊
+## O que eu ainda não faço
 
-## Welcome screen
-
-To modify the welcome screen, edit the `chainlit.md` file at the root of your project. If you do not want a welcome screen, just leave this file empty.
+Somas, médias e rankings (por exemplo, "quanto o Carlos vendeu no mês?") não são com o RAG. Essa parte vem em uma próxima etapa.
