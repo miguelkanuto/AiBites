@@ -1,28 +1,35 @@
-import csv
 import hashlib
 import json
 import logging
 import os
 import time
 from functools import lru_cache
+import threading
+from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import chainlit as cl
-import chromadb
-from chromadb.api import ClientAPI
-from chromadb.api.models.Collection import Collection
 from dotenv import load_dotenv
 from llama_index.core import (
-    PromptTemplate,
+    ChatPromptTemplate,
     Settings,
     Document,
     StorageContext,
     VectorStoreIndex,
 )
-from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+from llama_index.core.llms import ChatMessage, MessageRole
+from llama_index.core.query_engine import RetrieverQueryEngine
+from llama_index.core.retrievers import BaseRetriever
+from llama_index.core.schema import NodeWithScore, QueryBundle
+from llama_index.core.vector_stores import FilterOperator, MetadataFilter, MetadataFilters
 from llama_index.llms.openrouter import OpenRouter
-from llama_index.vector_stores.chroma import ChromaVectorStore
+from llama_index.vector_stores.postgres import PGVectorStore
+from sqlalchemy import Engine, create_engine, text
+from sqlalchemy.engine import make_url
+
+if TYPE_CHECKING:
+    from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 
 _ = load_dotenv()
 
@@ -30,34 +37,72 @@ logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
 logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-DATA_DIR = BASE_DIR / "data"
-CSV_PATH = DATA_DIR / "sales.csv"
 STORAGE_DIR = BASE_DIR / "storage"
 INDEX_METADATA_PATH = STORAGE_DIR / "index_metadata.json"
-CHROMA_DIR = STORAGE_DIR / "chroma"
-CHROMA_COLLECTION_NAME = "sales"
+VECTOR_TABLE_NAME = "sales_rag"
+EMBED_DIM = int(os.getenv("EMBED_DIM", "384"))
+
+PRODUCTS_SQL = """
+SELECT produto_id, nome, categoria, marca, descricao, preco_unitario, estoque, ativo
+FROM produtos
+ORDER BY produto_id
+"""
+
+SELLERS_SQL = """
+SELECT vendedor_id, nome, email, regiao, cargo, data_admissao, meta_mensal
+FROM vendedores
+ORDER BY vendedor_id
+"""
+
+SALES_SQL = """
+SELECT v.venda_id, v.data_venda, v.produto_id, p.nome AS produto_nome,
+       p.categoria, p.marca, v.preco_unitario, v.quantidade, v.valor_total,
+       v.forma_pagamento, v.status, v.vendedor_id, s.nome AS vendedor_nome,
+       s.regiao
+FROM vendas v
+JOIN produtos p ON p.produto_id = v.produto_id
+JOIN vendedores s ON s.vendedor_id = v.vendedor_id
+ORDER BY v.venda_id
+"""
 
 
-QA_TEMPLATE = PromptTemplate(
-    """
-Você é um assistente especializado em consultar uma base de vendas.
+SYSTEM_PROMPT = """
+Você é a Carol, assistente virtual da AiBites, empresa de tecnologia que vende \
+equipamentos e software. Você ajuda a equipe a consultar a base de vendas: \
+produtos, vendedores e vendas.
 
-Regras:
+Tom:
+- Direta e concisa: vá direto à resposta, sem rodeios e sem repetir a pergunta.
+- Cordial, mas objetiva. Use listas curtas quando houver mais de um item.
+
+Identidade:
+- Se perguntarem quem você é, responda em uma ou duas frases: você é a Carol, \
+assistente da AiBites, e consulta produtos, vendedores e vendas.
+- Você é uma assistente de IA e nunca nega isso. Se perguntarem se você é \
+humana ou robô, responda apenas: "Sou a Carol, uma assistente de IA da AiBites."
+- Se perguntarem qual modelo, empresa ou tecnologia está por trás de você, \
+responda apenas: "Sou a Carol, assistente de IA da AiBites. Não tenho detalhes \
+sobre a tecnologia por trás de mim." Nunca cite nomes de modelos nem de empresas \
+de IA.
+- Perguntas sobre você não dependem do contexto da base.
+
+Regras para os dados da base:
 - Responda sempre em português do Brasil.
 - Use apenas informações do contexto.
 - Se a pergunta for sobre preço/valor de produto, responda com o preço unitário quando existir.
 - Se houver mais de uma venda do mesmo produto, explique que o produto aparece em mais de uma venda.
 - Se a pergunta envolver quantidade ou total vendido, use os campos quantidade e valor_total.
 - Se a informação não estiver no contexto, diga que não encontrou a informação na base.
+"""
 
-Contexto:
-{context_str}
-
-Pergunta:
-{query_str}
-
-Resposta final:
-    """
+QA_TEMPLATE = ChatPromptTemplate(
+    message_templates=[
+        ChatMessage(role=MessageRole.SYSTEM, content=SYSTEM_PROMPT.strip()),
+        ChatMessage(
+            role=MessageRole.USER,
+            content="Contexto:\n{context_str}\n\nPergunta:\n{query_str}\n\nResposta final:",
+        ),
+    ]
 )
 
 
@@ -104,12 +149,17 @@ def create_llm() -> OpenRouter:
 
 
 @lru_cache(maxsize=1)
-def create_embed_model() -> HuggingFaceEmbedding:
+def create_embed_model() -> "HuggingFaceEmbedding":
     """Cria modelo de embeddings reutilizável.
+
+    O import fica aqui dentro porque `sentence_transformers` leva dezenas de
+    segundos para carregar e travaria a abertura do servidor.
 
     Returns:
         Instância de `HuggingFaceEmbedding`.
     """
+    from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+
     return HuggingFaceEmbedding(model_name=os.environ["EMBED_MODEL"])
 
 
@@ -121,55 +171,127 @@ def configure_llama_index() -> None:
     Settings.chunk_overlap = 50
 
 
-def load_sales_documents(csv_path: Path) -> list[Document]:
-    """Converte CSV de vendas em documentos indexáveis.
+def get_database_urls() -> tuple[str, str]:
+    """Monta as URLs síncrona e assíncrona a partir de `DATABASE_URL`.
 
-    Cada linha vira um documento independente com rótulos de coluna,
+    Returns:
+        Tupla `(url_psycopg2, url_asyncpg)`, com a senha preservada.
+    """
+    url = make_url(get_required_env("DATABASE_URL"))
+    sync_url = url.set(drivername="postgresql+psycopg2")
+
+    # O asyncpg usa `ssl=` no lugar de `sslmode=` e não aceita `channel_binding`.
+    query = dict(url.query)
+    ssl_mode = query.pop("sslmode", None)
+    query.pop("channel_binding", None)
+    if ssl_mode:
+        query["ssl"] = ssl_mode
+    async_url = url.set(drivername="postgresql+asyncpg", query=query)
+
+    return (
+        sync_url.render_as_string(hide_password=False),
+        async_url.render_as_string(hide_password=False),
+    )
+
+
+@lru_cache(maxsize=1)
+def get_engine() -> Engine:
+    """Cria engine SQLAlchemy compartilhada para ler as tabelas de vendas.
+
+    Returns:
+        Engine conectado ao PostgreSQL.
+    """
+    sync_url, _ = get_database_urls()
+    return create_engine(sync_url, pool_pre_ping=True)
+
+
+def format_product(row: Mapping[str, Any]) -> str:
+    """Descreve um produto em linguagem natural."""
+    return (
+        f"Produto {row['produto_id']}: {row['nome']}. Categoria: {row['categoria']}. "
+        f"Marca: {row['marca']}. Preço unitário: R$ {row['preco_unitario']}. "
+        f"Estoque: {row['estoque']} unidades. {row['descricao']}"
+    )
+
+
+def format_seller(row: Mapping[str, Any]) -> str:
+    """Descreve um vendedor em linguagem natural."""
+    return (
+        f"Vendedor {row['vendedor_id']}: {row['nome']}, {row['cargo']}, "
+        f"atua na região {row['regiao']}. E-mail: {row['email']}. "
+        f"Admitido em {row['data_admissao']}. Meta mensal: R$ {row['meta_mensal']}."
+    )
+
+
+def format_sale(row: Mapping[str, Any]) -> str:
+    """Descreve uma venda, já com dados do produto e do vendedor."""
+    return (
+        f"Venda {row['venda_id']} em {row['data_venda']}: o vendedor {row['vendedor_nome']} "
+        f"(região {row['regiao']}) vendeu {row['quantidade']} unidade(s) de "
+        f"{row['produto_nome']} (categoria {row['categoria']}, marca {row['marca']}) "
+        f"a R$ {row['preco_unitario']} cada, total R$ {row['valor_total']}. "
+        f"Pagamento: {row['forma_pagamento']}. Status: {row['status']}."
+    )
+
+
+def rows_to_documents(
+    sql: str,
+    kind: str,
+    formatter: Callable[[Mapping[str, Any]], str],
+    metadata_columns: tuple[str, ...],
+) -> list[Document]:
+    """Converte linhas de uma consulta em documentos indexáveis.
+
+    Cada linha vira um documento independente, escrito em frase,
     o que melhora recuperação semântica e reduz contexto irrelevante.
 
     Args:
-        csv_path: Caminho do arquivo CSV de vendas.
+        sql: Consulta que retorna as linhas.
+        kind: Tipo do documento (`produto`, `vendedor` ou `venda`).
+        formatter: Função que transforma a linha em texto.
+        metadata_columns: Colunas copiadas para os metadados do documento.
 
     Returns:
         Lista de documentos prontos para indexação.
     """
     documents: list[Document] = []
 
-    with csv_path.open(newline="", encoding="utf-8") as file:
-        reader = csv.DictReader(file)
-
-        for row in reader:
-            lines = [f"{key}: {value}" for key, value in row.items()]
-            documents.append(
-                Document(
-                    text="\n".join(lines),
-                    metadata={
-                        "file_name": csv_path.name,
-                        "file_path": str(csv_path),
-                        "venda_id": row.get("venda_id", ""),
-                        "produto_id": row.get("produto_id", ""),
-                        "produto_nome": row.get("produto_nome", ""),
-                    },
-                )
-            )
+    with get_engine().connect() as connection:
+        for row in connection.execute(text(sql)).mappings():
+            metadata = {"tipo": kind, **{col: str(row[col]) for col in metadata_columns}}
+            documents.append(Document(text=formatter(row), metadata=metadata))
 
     return documents
 
 
-def calculate_file_hash(file_path: Path) -> str:
-    """Calcula hash SHA-256 de arquivo.
+def load_documents() -> list[Document]:
+    """Lê produtos, vendedores e vendas do PostgreSQL como documentos.
+
+    Returns:
+        Lista com um documento por linha das três tabelas.
+    """
+    return [
+        *rows_to_documents(PRODUCTS_SQL, "produto", format_product, ("produto_id",)),
+        *rows_to_documents(SELLERS_SQL, "vendedor", format_seller, ("vendedor_id",)),
+        *rows_to_documents(
+            SALES_SQL, "venda", format_sale, ("venda_id", "produto_id")
+        ),
+    ]
+
+
+def calculate_data_hash(documents: list[Document]) -> str:
+    """Calcula hash SHA-256 do conteúdo dos documentos.
 
     Args:
-        file_path: Caminho do arquivo alvo.
+        documents: Documentos lidos do banco.
 
     Returns:
         Hash hexadecimal do conteúdo.
     """
     digest = hashlib.sha256()
 
-    with file_path.open("rb") as file:
-        for chunk in iter(lambda: file.read(8192), b""):
-            digest.update(chunk)
+    for document in documents:
+        digest.update(document.text.encode("utf-8"))
 
     return digest.hexdigest()
 
@@ -178,11 +300,10 @@ def get_index_metadata() -> dict[str, Any]:
     """Gera metadados usados para validar o índice persistido.
 
     Returns:
-        Caminho e hash do CSV e modelo de embeddings atuais.
+        Hash dos dados do banco e modelo de embeddings atuais.
     """
     return {
-        "csv_path": str(CSV_PATH),
-        "csv_hash": calculate_file_hash(CSV_PATH),
+        "data_hash": calculate_data_hash(load_documents()),
         "embed_model": os.environ["EMBED_MODEL"],
     }
 
@@ -216,9 +337,9 @@ def should_rebuild_index() -> bool:
     """Decide se índice persistido precisa ser recriado.
 
     Returns:
-        `True` quando storage está ausente ou CSV/modelo mudou.
+        `True` quando tabela de vetores está vazia ou dados/modelo mudaram.
     """
-    if not STORAGE_DIR.exists() or get_chroma_collection().count() == 0:
+    if get_vector_count() == 0:
         return True
 
     persisted_metadata = read_index_metadata()
@@ -227,49 +348,54 @@ def should_rebuild_index() -> bool:
 
 
 @lru_cache(maxsize=1)
-def get_chroma_client() -> ClientAPI:
-    """Cria cliente ChromaDB embarcado, persistido em disco.
+def get_vector_store() -> PGVectorStore:
+    """Cria vector store apontando para a tabela de vetores no PostgreSQL.
 
     Returns:
-        Cliente `PersistentClient` (sem servidor, roda dentro do app).
+        `PGVectorStore` (extensão pgvector) da tabela `data_sales_rag`.
     """
-    CHROMA_DIR.mkdir(parents=True, exist_ok=True)
-    return chromadb.PersistentClient(path=str(CHROMA_DIR))
+    sync_url, async_url = get_database_urls()
+    return PGVectorStore(
+        connection_string=sync_url,
+        async_connection_string=async_url,
+        table_name=VECTOR_TABLE_NAME,
+        embed_dim=EMBED_DIM,
+        hybrid_search=True,
+        text_search_config="portuguese",
+        initialization_fail_on_error=True,
+    )
 
 
-def get_chroma_collection() -> Collection:
-    """Retorna coleção Chroma de vendas, criando quando não existe.
+def get_vector_count() -> int:
+    """Conta quantos vetores existem na tabela do índice.
 
     Returns:
-        Coleção `sales` do ChromaDB.
+        Quantidade de linhas na tabela de vetores, ou 0 quando ela não existe.
     """
-    return get_chroma_client().get_or_create_collection(CHROMA_COLLECTION_NAME)
+    table_name = f"data_{VECTOR_TABLE_NAME}"
+
+    with get_engine().connect() as connection:
+        exists = connection.execute(
+            text("SELECT to_regclass(:name)"), {"name": f"public.{table_name}"}
+        ).scalar()
+        if exists is None:
+            return 0
+
+        return connection.execute(text(f"SELECT COUNT(*) FROM {table_name}")).scalar_one()
 
 
-def get_vector_store() -> ChromaVectorStore:
-    """Cria vector store apontando para a coleção atual do ChromaDB.
+def reset_vector_store() -> PGVectorStore:
+    """Recria a tabela de vetores do zero (estrutura e dados).
 
     Returns:
-        `ChromaVectorStore` da coleção de vendas.
+        `PGVectorStore` com a tabela nova e vazia.
     """
-    return ChromaVectorStore(chroma_collection=get_chroma_collection())
+    with get_engine().begin() as connection:
+        connection.execute(text(f"DROP TABLE IF EXISTS data_{VECTOR_TABLE_NAME}"))
 
-
-def reset_chroma_collection() -> ChromaVectorStore:
-    """Remove coleção antiga e recria coleção limpa no ChromaDB.
-
-    Returns:
-        `ChromaVectorStore` apontando para coleção recriada.
-    """
-    client = get_chroma_client()
-
-    try:
-        client.delete_collection(CHROMA_COLLECTION_NAME)
-    except Exception:
-        logger.debug("Coleção Chroma ainda não existia.")
-
-    chroma_collection = client.get_or_create_collection(CHROMA_COLLECTION_NAME)
-    return ChromaVectorStore(chroma_collection=chroma_collection)
+    vector_store = get_vector_store()
+    vector_store.clear()
+    return vector_store
 
 
 @lru_cache(maxsize=1)
@@ -290,15 +416,15 @@ def build_or_load_index() -> VectorStoreIndex:
                 embed_model=create_embed_model(),
             )
             logger.info(
-                "Index carregado do ChromaDB em %.2fs.",
+                "Index carregado do PostgreSQL em %.2fs.",
                 time.perf_counter() - start,
             )
             return index
         except Exception:
-            logger.exception("Falha ao carregar índice do ChromaDB. Reconstruindo.")
+            logger.exception("Falha ao carregar índice do PostgreSQL. Reconstruindo.")
 
-    documents = load_sales_documents(CSV_PATH)
-    vector_store = reset_chroma_collection()
+    documents = load_documents()
+    vector_store = reset_vector_store()
     storage_context = StorageContext.from_defaults(vector_store=vector_store)
     index = VectorStoreIndex.from_documents(
         documents,
@@ -306,11 +432,54 @@ def build_or_load_index() -> VectorStoreIndex:
     )
     write_index_metadata(get_index_metadata())
     logger.info(
-        "Index reconstruído no ChromaDB em %.2fs com %s documentos.",
+        "Index reconstruído no PostgreSQL em %.2fs com %s documentos.",
         time.perf_counter() - start,
         len(documents),
     )
     return index
+
+
+class CatalogAndSalesRetriever(BaseRetriever):
+    """Busca catálogo (produtos e vendedores) e vendas em separado.
+
+    As 500 vendas repetem nomes de produtos e vendedores e, numa busca única,
+    tomam o lugar dos cadastros. Buscando cada grupo à parte, as perguntas do
+    tipo "quais produtos..." sempre recebem os cadastros no contexto.
+    """
+
+    def __init__(
+        self, index: VectorStoreIndex, top_k: int = 4, sales_top_k: int = 2
+    ) -> None:
+        super().__init__()
+        self._catalog = index.as_retriever(
+            similarity_top_k=top_k,
+            sparse_top_k=top_k,
+            vector_store_query_mode="hybrid",
+            filters=MetadataFilters(
+                filters=[
+                    MetadataFilter(
+                        key="tipo",
+                        value=["produto", "vendedor"],
+                        operator=FilterOperator.IN,
+                    )
+                ]
+            ),
+        )
+        self._sales = index.as_retriever(
+            similarity_top_k=sales_top_k,
+            sparse_top_k=sales_top_k,
+            vector_store_query_mode="hybrid",
+            filters=MetadataFilters(
+                filters=[MetadataFilter(key="tipo", value="venda")]
+            ),
+        )
+
+    def _retrieve(self, query_bundle: QueryBundle) -> list[NodeWithScore]:
+        nodes = self._catalog.retrieve(query_bundle) + self._sales.retrieve(query_bundle)
+        unique: dict[str, NodeWithScore] = {}
+        for node in nodes:
+            unique.setdefault(node.node.node_id, node)
+        return list(unique.values())
 
 
 def create_query_engine(index: VectorStoreIndex):
@@ -322,21 +491,49 @@ def create_query_engine(index: VectorStoreIndex):
     Returns:
         Query engine configurado.
     """
-    return index.as_query_engine(
-        similarity_top_k=4,
+    return RetrieverQueryEngine.from_args(
+        CatalogAndSalesRetriever(index),
         text_qa_template=QA_TEMPLATE,
         response_mode="simple_summarize",
     )
 
 
+QUERY_ENGINE_LOCK = threading.Lock()
+
+
 @lru_cache(maxsize=1)
+def build_query_engine():
+    """Monta o query engine uma única vez."""
+    return create_query_engine(build_or_load_index())
+
+
 def get_query_engine():
     """Retorna query engine compartilhado entre sessões.
+
+    O lock evita montar o engine duas vezes quando a pré-carga e a primeira
+    conversa chegam ao mesmo tempo.
 
     Returns:
         Query engine pronto para responder perguntas.
     """
-    return create_query_engine(build_or_load_index())
+    with QUERY_ENGINE_LOCK:
+        return build_query_engine()
+
+
+def warm_up() -> None:
+    """Carrega modelo de embeddings e índice antes da primeira conversa."""
+    try:
+        start = time.perf_counter()
+        get_query_engine()
+        logger.info("Pré-carga concluída em %.2fs.", time.perf_counter() - start)
+    except Exception:
+        logger.exception("Falha na pré-carga; será tentada de novo na primeira conversa.")
+
+
+@cl.on_app_startup
+async def on_app_startup() -> None:
+    """Abre o servidor logo e aquece o RAG em segundo plano."""
+    threading.Thread(target=warm_up, daemon=True).start()
 
 
 @cl.on_chat_start
@@ -348,7 +545,8 @@ async def on_chat_start() -> None:
 
     await cl.Message(
         content=(
-            "RAG iniciado com o CSV de vendas. Exemplo: `Qual valor do notebook Dell?`"
+            "Oi, eu sou a Carol, da AiBites. Consulto produtos, vendedores e vendas. "
+            "Exemplo: `Qual valor do notebook Dell?`"
         )
     ).send()
 
