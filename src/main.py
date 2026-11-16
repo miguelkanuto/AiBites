@@ -45,7 +45,7 @@ from rbac import Usuario, build_access_filters, filtrar_resultados
 from limits import Limits
 
 if TYPE_CHECKING:
-    from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+    from llama_index.embeddings.fastembed import FastEmbedEmbedding
 
 _ = load_dotenv()
 
@@ -192,18 +192,20 @@ def create_llm() -> OpenRouter:
 
 
 @lru_cache(maxsize=1)
-def create_embed_model() -> "HuggingFaceEmbedding":
+def create_embed_model() -> "FastEmbedEmbedding":
     """Cria modelo de embeddings reutilizável.
 
-    O import fica aqui dentro porque `sentence_transformers` leva dezenas de
-    segundos para carregar e travaria a abertura do servidor.
+    Usa ONNX (fastembed) em vez de PyTorch: gera os mesmos vetores do modelo
+    sentence-transformers (cosseno 1,0 medido em frases de teste) com bem menos
+    memória, o que permite hospedar o site em planos pequenos. O import fica
+    aqui dentro para não atrasar a abertura do servidor.
 
     Returns:
-        Instância de `HuggingFaceEmbedding`.
+        Instância de `FastEmbedEmbedding`.
     """
-    from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+    from llama_index.embeddings.fastembed import FastEmbedEmbedding
 
-    return HuggingFaceEmbedding(model_name=os.environ["EMBED_MODEL"])
+    return FastEmbedEmbedding(model_name=os.environ["EMBED_MODEL"])
 
 
 def configure_llama_index() -> None:
