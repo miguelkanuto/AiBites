@@ -1,3 +1,13 @@
+@font-face { font-family: 'Gabarito Variable'; font-style: normal; font-display: swap; font-weight: 100 900; src: url('/public/fonts/gabarito-latin-wght-normal.woff2') format('woff2-variations'); }
+@font-face { font-family: 'Gabarito Variable'; font-style: normal; font-display: swap; font-weight: 100 900; src: url('/public/fonts/gabarito-latin-ext-wght-normal.woff2') format('woff2-variations'); }
+@font-face { font-family: 'Onest Variable'; font-style: normal; font-display: swap; font-weight: 100 900; src: url('/public/fonts/onest-latin-wght-normal.woff2') format('woff2-variations'); }
+@font-face { font-family: 'Onest Variable'; font-style: normal; font-display: swap; font-weight: 100 900; src: url('/public/fonts/onest-latin-ext-wght-normal.woff2') format('woff2-variations'); }
+
+/* Títulos na fonte de exibição da marca */
+h1, h2, h3, .font-display { font-family: 'Gabarito Variable', 'Onest Variable', sans-serif; letter-spacing: -0.02em; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; } }
+
 /* AiBites: ajustes finos sobre o tema (cores ficam em theme.json). */
 
 /* Barra de rolagem fina, na cor do tema */

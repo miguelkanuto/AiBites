@@ -1,6 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="168" height="40" viewBox="0 0 168 40" fill="none">
-  <rect x="2" y="4" width="32" height="32" rx="9" fill="#0EA5E9"/>
-  <path d="M11.5 27.5 18 12.5l6.5 15M14.2 22.5h7.6" stroke="#0A1222" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="29.5" cy="10.5" r="2.4" fill="#0A1222"/>
-  <text x="44" y="28.5" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="23" font-weight="700" fill="#E6EDF7">Ai<tspan fill="#38BDF8">Bites</tspan></text>
+<svg xmlns="http://www.w3.org/2000/svg" width="150" height="40" viewBox="0 0 150 40" fill="none">
+  <defs><mask id="b"><rect width="40" height="40" fill="#fff"/><circle cx="31.5" cy="8.5" r="6.2" fill="#000"/></mask></defs>
+  <g stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round"><path d="M3.5 15h4M3.5 21h4M3.5 27h4M32.5 21h4M32.5 27h4M15 32.5v4M21 32.5v4M27 32.5v4"/></g>
+  <rect x="7.5" y="7.5" width="25" height="25" rx="7.5" fill="#8CA2FF" mask="url(#b)"/>
+  <g fill="#12141A"><rect x="13" y="14.5" width="11" height="3.2" rx="1.6"/><rect x="13" y="20.4" width="15" height="3.2" rx="1.6"/><rect x="13" y="26.3" width="8" height="3.2" rx="1.6"/></g>
+  <text x="46" y="28" font-family="Gabarito, 'Arial Rounded MT Bold', 'Segoe UI', Arial, sans-serif" font-size="26" font-weight="800" letter-spacing="-0.8" fill="#FFFFFF"><tspan fill="#8CA2FF">ai</tspan>bites</text>
 </svg>
