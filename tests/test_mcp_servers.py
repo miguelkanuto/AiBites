@@ -18,8 +18,9 @@ from conftest import CEO_HELENA, CLIENTE_PAULO, GERENTE_MARCOS, RH_JULIANA, TI_R
 pytestmark = pytest.mark.integration
 
 
-@pytest.fixture(scope="module")
-def mundo():
+@pytest.fixture(scope="module", params=["stdio", "inprocess"])
+def mundo(request):
+    """Os mesmos testes rodam com os servidores em processos separados e em memória."""
     if not os.getenv("AIBITES_DATABASE_URL"):
         pytest.skip("AIBITES_DATABASE_URL não configurada")
 
@@ -31,7 +32,7 @@ def mundo():
     os.environ["MCP_CONTEXT_SECRET"] = "segredo-de-teste"
 
     loop = asyncio.new_event_loop()
-    hub = McpHub()
+    hub = McpHub(mode=request.param)
     loop.run_until_complete(hub.start())
     assert hub.failures == {}, hub.failures
 

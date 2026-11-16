@@ -126,7 +126,7 @@ CREATE TABLE IF NOT EXISTS eventos_seguranca (
 
 CREATE INDEX IF NOT EXISTS idx_eventos_seguranca_tipo ON eventos_seguranca (tipo, criado_em DESC);
 
--- Cache semântico das respostas do RAG (ver src/cache.py). Dimensão 384 = modelo de embeddings.
+-- Cache semântico das respostas do RAG (ver src/cache.py). Dimensão 768 = EMBED_DIM (Gemini).
 CREATE TABLE IF NOT EXISTS cache_semantico (
     cache_id        BIGSERIAL PRIMARY KEY,
     criado_em       TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -134,7 +134,7 @@ CREATE TABLE IF NOT EXISTS cache_semantico (
     escopo          TEXT NOT NULL,
     versao_indice   TEXT NOT NULL,
     pergunta        TEXT NOT NULL,
-    embedding       vector(384) NOT NULL,
+    embedding       vector(768) NOT NULL,
     resposta        TEXT NOT NULL,
     acertos         INTEGER NOT NULL DEFAULT 0
 );

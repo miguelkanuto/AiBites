@@ -44,8 +44,7 @@ from pipeline import ConversationState, process_message
 from rbac import Usuario, build_access_filters, filtrar_resultados
 from limits import Limits
 
-if TYPE_CHECKING:
-    from llama_index.embeddings.fastembed import FastEmbedEmbedding
+from embeddings import GeminiEmbedding
 
 _ = load_dotenv()
 
@@ -56,7 +55,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 STORAGE_DIR = BASE_DIR / "storage"
 INDEX_METADATA_PATH = STORAGE_DIR / "index_metadata.json"
 VECTOR_TABLE_NAME = "sales_rag"
-EMBED_DIM = int(os.getenv("EMBED_DIM", "384"))
+EMBED_DIM = int(os.getenv("EMBED_DIM", "768"))
 DUMMY_PASSWORD_HASH = hash_password("senha-inexistente")
 FIRST_PERSON = re.compile(r"\b(meu|minha|meus|minhas|eu|mim)\b", re.IGNORECASE)
 
@@ -192,19 +191,16 @@ def create_llm() -> OpenRouter:
 
 
 @lru_cache(maxsize=1)
-def create_embed_model() -> "FastEmbedEmbedding":
-    """Cria modelo de embeddings reutilizável.
+def create_embed_model() -> GeminiEmbedding:
+    """Cria o cliente de embeddings (API do Gemini), reutilizável.
 
-    Usa ONNX (fastembed) em vez de PyTorch: gera os mesmos vetores do modelo
-    sentence-transformers (cosseno 1,0 medido em frases de teste) com bem menos
-    memória. O import fica aqui dentro para não atrasar a abertura do servidor.
+    Não há modelo local: o servidor fica leve e cabe em planos pequenos, mas cada
+    pergunta depende da API e da cota gratuita (ver `src/embeddings.py`).
 
     Returns:
-        Instância de `FastEmbedEmbedding`.
+        Instância de `GeminiEmbedding` com o modelo e a dimensão do `.env`.
     """
-    from llama_index.embeddings.fastembed import FastEmbedEmbedding
-
-    return FastEmbedEmbedding(model_name=os.environ["EMBED_MODEL"])
+    return GeminiEmbedding(model_name=os.environ["EMBED_MODEL"], dim=EMBED_DIM)
 
 
 def configure_llama_index() -> None:

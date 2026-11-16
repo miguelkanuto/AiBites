@@ -20,6 +20,7 @@ from cache import is_cacheable
 from cache import lookup as cache_lookup
 from cache import scope_key as cache_scope
 from cache import store as cache_store
+from embeddings import EmbeddingError
 from guardrails import BLOCK_THRESHOLD, check_input, leaks_system_prompt, redact
 from judge import judge_injection
 from limits import risk_paused
@@ -29,6 +30,11 @@ from router import route, smalltalk_reply
 from tool_policy import ferramentas_permitidas
 
 logger = logging.getLogger(__name__)
+
+MSG_EMBEDDINGS_DOWN = (
+    "A busca na base está indisponível agora (o serviço de embeddings atingiu o limite ou não respondeu). "
+    "Tente de novo em alguns minutos."
+)
 
 NO_TOOLS_MESSAGE = "Essa ação não está disponível para o seu perfil. Posso ajudar a consultar produtos."
 
@@ -115,6 +121,20 @@ class _LoggingHooks:
             duracao_ms=event.duration_ms,
             confirmada=event.confirmed,
         )
+
+
+async def embed_query(core: Any, text: str) -> list[float] | None:
+    """Vetor da pergunta, ou `None` quando o provedor de embeddings falha ou está sem cota.
+
+    Só `EmbeddingError` é tratada: qualquer outro erro é bug e deve aparecer.
+    """
+    import asyncio
+
+    try:
+        return await asyncio.to_thread(core.create_embed_model().get_query_embedding, text)
+    except EmbeddingError as error:
+        logger.warning("Embeddings indisponíveis (cache e busca ignorados): %s", error)
+        return None
 
 
 async def process_message(
@@ -234,8 +254,8 @@ async def process_message(
     else:
         scope = cache_scope(usuario.papel)
         version = (core.read_index_metadata() or {}).get("data_hash", "")[:16]
-        vector = await asyncio.to_thread(core.create_embed_model().get_query_embedding, verdict.sanitized)
-        hit = await asyncio.to_thread(cache_lookup, engine, vector, scope, version)
+        vector = await embed_query(core, verdict.sanitized)
+        hit = await asyncio.to_thread(cache_lookup, engine, vector, scope, version) if vector else None
         await stage("cache", acerto=bool(hit), escopo=scope, similaridade=round(hit.similarity, 3) if hit else None)
 
         if hit:
@@ -243,6 +263,10 @@ async def process_message(
             model = "cache semântico"
             reference = reference_cost(900, 120)
             cache_hit = True
+        elif vector is None:
+            # Sem vetor não há busca: avisa em vez de responder sem consultar a base.
+            answer = MSG_EMBEDDINGS_DOWN
+            model = "indisponível"
         else:
             query_engine = await asyncio.to_thread(core.get_query_engine, usuario)
             response = await asyncio.to_thread(query_engine.query, verdict.sanitized)

@@ -14,12 +14,37 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import importlib.util
+
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+from mcp.shared.memory import create_connected_server_and_client_session
 
 logger = logging.getLogger(__name__)
 
 SERVERS_DIR = Path(__file__).resolve().parent / "mcp_servers"
+
+
+def load_server_module(server: str) -> Any:
+    """Importa o módulo de um servidor MCP para rodar no mesmo processo.
+
+    Os servidores importam `common` pelo nome simples (rodam como script), então a
+    pasta deles entra no `sys.path`. O módulo recebe um nome próprio para não colidir
+    com pacotes de mesmo nome (ex.: `slack`).
+    """
+    if str(SERVERS_DIR) not in sys.path:
+        sys.path.append(str(SERVERS_DIR))
+    name = f"aibites_mcp_{server}"
+    if name in sys.modules:
+        return sys.modules[name]
+    spec = importlib.util.spec_from_file_location(name, SERVERS_DIR / f"{server}.py")
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Servidor MCP não encontrado: {server}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
 SERVER_NAMES = ("rh", "ti", "slack", "vendas")
 CALL_TIMEOUT_SECONDS = 30
 START_TIMEOUT_SECONDS = 60
@@ -61,8 +86,11 @@ def public_schema(schema: dict[str, Any]) -> dict[str, Any]:
 class McpHub:
     """Mantém os servidores MCP rodando e expõe `catalog()` e `call()`."""
 
-    def __init__(self, servers: tuple[str, ...] = SERVER_NAMES) -> None:
+    def __init__(self, servers: tuple[str, ...] = SERVER_NAMES, mode: str | None = None) -> None:
         self._servers = servers
+        self._mode = mode or os.getenv("AIBITES_MCP_MODE", "stdio")
+        if self._mode not in ("stdio", "inprocess"):
+            raise ValueError(f"AIBITES_MCP_MODE inválido: {self._mode!r} (use 'stdio' ou 'inprocess').")
         self._sessions: dict[str, ClientSession] = {}
         self._tools: list[ToolInfo] = []
         self._failures: dict[str, str] = {}
@@ -102,14 +130,21 @@ class McpHub:
             self._sessions.clear()
 
     async def _start_server(self, stack: AsyncExitStack, server: str) -> None:
-        parameters = StdioServerParameters(
-            command=sys.executable,
-            args=[str(SERVERS_DIR / f"{server}.py")],
-            env={**os.environ, "PYTHONIOENCODING": "utf-8"},
-        )
-        read, write = await stack.enter_async_context(stdio_client(parameters))
-        session = await stack.enter_async_context(ClientSession(read, write))
-        await asyncio.wait_for(session.initialize(), timeout=START_TIMEOUT_SECONDS)
+        if self._mode == "inprocess":
+            # Mesmo protocolo MCP, por memória, sem processo separado (cada um custa ~60 MB).
+            module = load_server_module(server)
+            session = await stack.enter_async_context(
+                create_connected_server_and_client_session(module.mcp._mcp_server)
+            )
+        else:
+            parameters = StdioServerParameters(
+                command=sys.executable,
+                args=[str(SERVERS_DIR / f"{server}.py")],
+                env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+            )
+            read, write = await stack.enter_async_context(stdio_client(parameters))
+            session = await stack.enter_async_context(ClientSession(read, write))
+            await asyncio.wait_for(session.initialize(), timeout=START_TIMEOUT_SECONDS)
 
         self._sessions[server] = session
         for tool in (await session.list_tools()).tools:

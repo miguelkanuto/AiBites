@@ -57,12 +57,13 @@ def test_resposta_vazia_nao_entra() -> None:
 
 # --- Banco (integração) ---
 
+CACHE_DIM = 768  # igual a vector(768) em db/schema.sql e ao EMBED_DIM
 TESTE = "TESTE-CACHE"
 VERSAO = "versao-de-teste"
 
 
 def _vetor(*primeiros: float) -> list[float]:
-    return [*primeiros, *([0.0] * (384 - len(primeiros)))]
+    return [*primeiros, *([0.0] * (CACHE_DIM - len(primeiros)))]
 
 
 @pytest.fixture
