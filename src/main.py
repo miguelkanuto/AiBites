@@ -197,8 +197,7 @@ def create_embed_model() -> "FastEmbedEmbedding":
 
     Usa ONNX (fastembed) em vez de PyTorch: gera os mesmos vetores do modelo
     sentence-transformers (cosseno 1,0 medido em frases de teste) com bem menos
-    memória, o que permite hospedar o site em planos pequenos. O import fica
-    aqui dentro para não atrasar a abertura do servidor.
+    memória. O import fica aqui dentro para não atrasar a abertura do servidor.
 
     Returns:
         Instância de `FastEmbedEmbedding`.
@@ -448,11 +447,18 @@ def write_index_metadata(metadata: dict[str, Any]) -> None:
 def should_rebuild_index() -> bool:
     """Decide se índice persistido precisa ser recriado.
 
+    Sem `AIBITES_ADMIN_DATABASE_URL` (servidor público) o app só lê: o índice é
+    gerenciado por `db/build_index.py`, e o manifesto local (`storage/`) não existe
+    no contêiner. Nesse modo, um índice com dados é usado como está.
+
     Returns:
         `True` quando tabela de vetores está vazia ou dados/modelo mudaram.
     """
     if get_vector_count() == 0:
         return True
+
+    if not os.getenv("AIBITES_ADMIN_DATABASE_URL"):
+        return False
 
     persisted_metadata = read_index_metadata()
     current_metadata = get_index_metadata()
