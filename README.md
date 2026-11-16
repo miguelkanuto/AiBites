@@ -144,3 +144,7 @@ Veja `.env.example`. Não use o nome `DATABASE_URL`: o Chainlit o reconhece sozi
 - O site usa login de demonstração sem senha; só serve para uma demonstração pública com dados fictícios. Os limites por visitante dependem do id da sessão, que é criado a cada visita.
 - As métricas do site contam só respostas que registram o custo de referência (as mais antigas não entram na economia).
 - Ainda não há o "pergunte sobre a arquitetura" no site, a suíte de avaliação com bloqueio de release, o Docker nem o login com Google.
+
+## Publicar o site
+
+Veja [docs/DEPLOY.md](docs/DEPLOY.md): imagem Docker única (`Dockerfile`) pensada para Hugging Face Spaces, com o banco no Neon.
