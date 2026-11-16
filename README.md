@@ -4,7 +4,7 @@ A **Carol** é a assistente da AiBites, uma empresa fictícia. Ela responde perg
 
 > Os dados e os sistemas externos (RH, TI, Slack) são **fictícios e simulados**. Os modelos de linguagem são reais e gratuitos (OpenRouter); o custo exibido é **simulado** com preços de referência.
 
-Stack: Chainlit (interface) · LlamaIndex (RAG) · PostgreSQL + pgvector (dados e vetores) · MCP (ferramentas) · OpenRouter (LLM) · embeddings locais em ONNX (fastembed, modelo MiniLM multilíngue).
+Stack: Chainlit (interface) · LlamaIndex (RAG) · PostgreSQL + pgvector (dados e vetores) · MCP (ferramentas) · OpenRouter (LLM) · embeddings pela API do Gemini (`gemini-embedding-001`, 768 dimensões).
 
 ## Como uma mensagem é tratada
 
@@ -38,7 +38,7 @@ O site não pede senha: quem visita escolhe uma persona fictícia (`AIBITES_SITE
 - [uv](https://docs.astral.sh/uv/) (baixa o Python 3.13 sozinho)
 - Conta no [OpenRouter](https://openrouter.ai) com uma API key (os modelos `:free` têm limite diário)
 - Um PostgreSQL com a extensão `vector`. O plano gratuito do [Neon](https://neon.tech) serve.
-- ~3 GB livres (o `torch` e o modelo de embeddings são pesados)
+- Uma chave gratuita do Google AI Studio (`GEMINI_API_KEY`, sem cartão) para os embeddings; não há modelo local
 
 ## Configurar
 
@@ -114,7 +114,7 @@ O **cache semântico** (`cache_semantico`, pgvector) reaproveita respostas de pe
 uv run pytest tests -q
 ```
 
-Os testes unitários (política, senhas, guardrails, roteador, agente com modelo falso, cache, custo) rodam sem banco. Os de integração usam o PostgreSQL do `.env`, os servidores MCP reais (com bancos temporários) e o modelo de embeddings, e levam alguns minutos. **Nenhum teste chama o LLM**; testes pulados não contam como aprovados.
+Os testes unitários (política, senhas, guardrails, roteador, agente com modelo falso, cache, custo) rodam sem banco. Os de integração usam o PostgreSQL do `.env`, os servidores MCP reais (com bancos temporários, nos dois modos: processos separados e em memória) e a API de embeddings (usa a cota gratuita do Gemini), e levam alguns minutos. **Nenhum teste chama o LLM**; testes pulados não contam como aprovados.
 
 ## Variáveis de ambiente
 
@@ -147,4 +147,4 @@ Veja `.env.example`. Não use o nome `DATABASE_URL`: o Chainlit o reconhece sozi
 
 ## Publicar o site
 
-Veja [docs/DEPLOY.md](docs/DEPLOY.md): imagem Docker única (`Dockerfile`) pensada para Hugging Face Spaces, com o banco no Neon.
+Veja [docs/DEPLOY.md](docs/DEPLOY.md): imagem Docker única (`Dockerfile`) pensada para o plano gratuito do Render, com o banco no Neon e os embeddings no Gemini.
