@@ -3292,12 +3292,17 @@ source = { virtual = "." }
 dependencies = [
     { name = "asyncpg" },
     { name = "chainlit" },
+    { name = "fastapi" },
     { name = "llama-index-embeddings-huggingface" },
     { name = "llama-index-llms-openrouter" },
     { name = "llama-index-vector-stores-postgres" },
+    { name = "mcp" },
+    { name = "openai" },
     { name = "psycopg2-binary" },
     { name = "python-dotenv" },
     { name = "sqlalchemy" },
+    { name = "sse-starlette" },
+    { name = "uvicorn" },
 ]
 
 [package.dev-dependencies]
@@ -3309,12 +3314,17 @@ dev = [
 requires-dist = [
     { name = "asyncpg", specifier = ">=0.32.0" },
     { name = "chainlit", specifier = ">=2.11.1" },
+    { name = "fastapi", specifier = ">=0.162.0" },
     { name = "llama-index-embeddings-huggingface", specifier = ">=0.7.0" },
     { name = "llama-index-llms-openrouter", specifier = ">=0.5.1" },
     { name = "llama-index-vector-stores-postgres", specifier = ">=0.9.0" },
+    { name = "mcp", specifier = ">=1.30.0" },
+    { name = "openai", specifier = ">=2.54.0" },
     { name = "psycopg2-binary", specifier = ">=2.9.13" },
     { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "sqlalchemy", specifier = ">=2.0.55" },
+    { name = "sse-starlette", specifier = ">=3.6.0" },
+    { name = "uvicorn", specifier = ">=0.54.0" },
 ]
 
 [package.metadata.requires-dev]

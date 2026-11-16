@@ -1,6 +1,6 @@
 """Testes de integração do RBAC na busca real (PostgreSQL + pgvector + embeddings).
 
-Não chamam o LLM. Exigem `DATABASE_URL` (banco populado com db/seed.py) e as
+Não chamam o LLM. Exigem `AIBITES_DATABASE_URL` (banco populado com db/seed.py) e as
 demais variáveis do .env; sem isso, os testes são pulados (e pulado não conta
 como aprovado).
 """
@@ -24,7 +24,7 @@ from conftest import (
 
 pytestmark = pytest.mark.integration
 
-if not os.getenv("DATABASE_URL"):
+if not os.getenv("AIBITES_DATABASE_URL"):
     # O main.py carrega o .env ao ser importado; checamos depois do import.
     try:
         from dotenv import load_dotenv
@@ -48,8 +48,8 @@ PERGUNTAS = [
 
 @pytest.fixture(scope="module")
 def index():
-    if not os.getenv("DATABASE_URL"):
-        pytest.skip("DATABASE_URL não configurada")
+    if not os.getenv("AIBITES_DATABASE_URL"):
+        pytest.skip("AIBITES_DATABASE_URL não configurada")
 
     import main
 
@@ -136,8 +136,8 @@ def test_ti_nao_recebe_vendas_nem_salarios(index) -> None:
 
 
 def test_login_com_conta_fake_e_senha_errada_falha() -> None:
-    if not os.getenv("DATABASE_URL"):
-        pytest.skip("DATABASE_URL não configurada")
+    if not os.getenv("AIBITES_DATABASE_URL"):
+        pytest.skip("AIBITES_DATABASE_URL não configurada")
 
     import main
 

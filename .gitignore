@@ -4,3 +4,5 @@ __pycache__/
 .chainlit/translations/
 .files/
 storage/
+web/node_modules/
+web/dist/

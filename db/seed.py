@@ -181,9 +181,9 @@ def gerar_vendas() -> list[tuple]:
 
 def main() -> None:
     _ = load_dotenv(BASE_DIR / ".env")
-    database_url = os.getenv("DATABASE_URL")
+    database_url = os.getenv("AIBITES_ADMIN_DATABASE_URL") or os.getenv("AIBITES_DATABASE_URL")
     if not database_url:
-        raise SystemExit("Defina DATABASE_URL no arquivo .env.")
+        raise SystemExit("Defina AIBITES_ADMIN_DATABASE_URL (ou AIBITES_DATABASE_URL) no arquivo .env.")
 
     vendas = gerar_vendas()
 

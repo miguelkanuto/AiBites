@@ -71,6 +71,76 @@ CREATE TABLE IF NOT EXISTS usuarios (
     )
 );
 
+-- Auditoria: uma linha por pergunta, com dados pessoais já redigidos.
+-- Sem chave estrangeira em usuario_id, para o histórico sobreviver à remoção da conta.
+CREATE TABLE IF NOT EXISTS log_conversas (
+    log_id          BIGSERIAL PRIMARY KEY,
+    criado_em       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    usuario_id      TEXT NOT NULL,
+    papel           TEXT NOT NULL,
+    sessao_id       TEXT,
+    pergunta        TEXT NOT NULL,
+    resposta        TEXT,
+    bloqueada       BOOLEAN NOT NULL DEFAULT FALSE,
+    motivos         TEXT[] NOT NULL DEFAULT '{}',
+    risco           INTEGER NOT NULL DEFAULT 0,
+    documentos      TEXT[] NOT NULL DEFAULT '{}',
+    latencia_ms     INTEGER,
+    modelo          TEXT
+);
+
+ALTER TABLE log_conversas ADD COLUMN IF NOT EXISTS trace_id TEXT;
+ALTER TABLE log_conversas ADD COLUMN IF NOT EXISTS rota TEXT;
+ALTER TABLE log_conversas ADD COLUMN IF NOT EXISTS custo_simulado NUMERIC(12, 6);
+ALTER TABLE log_conversas ADD COLUMN IF NOT EXISTS custo_referencia NUMERIC(12, 6);
+
+CREATE INDEX IF NOT EXISTS idx_log_conversas_usuario ON log_conversas (usuario_id, criado_em DESC);
+
+-- Rastro de cada chamada de ferramenta do agente (argumentos já redigidos).
+CREATE TABLE IF NOT EXISTS tool_calls (
+    call_id         BIGSERIAL PRIMARY KEY,
+    criado_em       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    trace_id        TEXT NOT NULL,
+    usuario_id      TEXT NOT NULL,
+    papel           TEXT NOT NULL,
+    servidor        TEXT NOT NULL,
+    ferramenta      TEXT NOT NULL,
+    argumentos      JSONB,
+    status          TEXT NOT NULL,
+    resultado       TEXT,
+    duracao_ms      INTEGER,
+    confirmada      BOOLEAN
+);
+
+CREATE INDEX IF NOT EXISTS idx_tool_calls_usuario ON tool_calls (usuario_id, criado_em DESC);
+CREATE INDEX IF NOT EXISTS idx_tool_calls_trace ON tool_calls (trace_id);
+
+-- Eventos de segurança: login falho, conta bloqueada, limite excedido, usuário pausado.
+CREATE TABLE IF NOT EXISTS eventos_seguranca (
+    evento_id       BIGSERIAL PRIMARY KEY,
+    criado_em       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    tipo            TEXT NOT NULL,
+    usuario         TEXT,
+    detalhe         TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_eventos_seguranca_tipo ON eventos_seguranca (tipo, criado_em DESC);
+
+-- Cache semântico das respostas do RAG (ver src/cache.py). Dimensão 384 = modelo de embeddings.
+CREATE TABLE IF NOT EXISTS cache_semantico (
+    cache_id        BIGSERIAL PRIMARY KEY,
+    criado_em       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    expira_em       TIMESTAMPTZ NOT NULL,
+    escopo          TEXT NOT NULL,
+    versao_indice   TEXT NOT NULL,
+    pergunta        TEXT NOT NULL,
+    embedding       vector(384) NOT NULL,
+    resposta        TEXT NOT NULL,
+    acertos         INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_cache_semantico_escopo ON cache_semantico (escopo, versao_indice);
+
 CREATE INDEX IF NOT EXISTS idx_vendas_produto ON vendas (produto_id);
 CREATE INDEX IF NOT EXISTS idx_vendas_vendedor ON vendas (vendedor_id);
 CREATE INDEX IF NOT EXISTS idx_vendas_data ON vendas (data_venda);
