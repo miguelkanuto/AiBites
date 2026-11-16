@@ -4,7 +4,7 @@ A **Carol** é a assistente da AiBites, uma empresa fictícia. Ela responde perg
 
 > Os dados e os sistemas externos (RH, TI, Slack) são **fictícios e simulados**. Os modelos de linguagem são reais e gratuitos (OpenRouter); o custo exibido é **simulado** com preços de referência.
 
-Stack: Chainlit (interface) · LlamaIndex (RAG) · PostgreSQL + pgvector (dados e vetores) · MCP (ferramentas) · OpenRouter (LLM) · HuggingFace (embeddings locais).
+Stack: Chainlit (interface) · LlamaIndex (RAG) · PostgreSQL + pgvector (dados e vetores) · MCP (ferramentas) · OpenRouter (LLM) · embeddings locais em ONNX (fastembed, modelo MiniLM multilíngue).
 
 ## Como uma mensagem é tratada
 

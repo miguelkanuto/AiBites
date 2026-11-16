@@ -1,9 +1,15 @@
 # Publicar o site (Hugging Face Spaces)
 
 O site (API FastAPI + React compilado) roda numa única imagem Docker. O banco continua no Neon.
-Escolhi o Hugging Face Spaces porque o servidor usa cerca de **1,3 GB de RAM** (medido localmente,
-com o modelo de embeddings carregado), mais do que cabe em planos gratuitos de 512 MB.
-Os limites atuais do plano gratuito devem ser conferidos na página do Hugging Face antes de publicar.
+O servidor usa cerca de **1,05 GB de RAM** no total (medido localmente no Windows: ~0,8 GB do processo
+principal + 4 processos de ferramentas MCP; o consumo no Linux deve ser parecido, mas não foi medido),
+depois de trocar o PyTorch por embeddings ONNX (antes eram ~1,5 GB). Isso **não cabe** em planos gratuitos
+de 512 MB (ex.: Render grátis).
+
+**Hugging Face Spaces com Docker exige billing ativo** na conta (créditos ou PRO): a própria página de criação
+do Space avisa isso. O hardware CPU Basic é gratuito, mas não encontrei um limite de gasto configurável para
+conta pessoal. Qualquer host com cartão (Hugging Face, Google Cloud Run, Fly.io) tem esse risco de cobrança;
+só não ter cartão cadastrado elimina o risco.
 
 > Estado: o `Dockerfile` **ainda não foi construído** (não há Docker nesta máquina). O primeiro build
 > acontece no próprio Space; se falhar, o log de build mostra o motivo.

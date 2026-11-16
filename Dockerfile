@@ -17,7 +17,7 @@ FROM python:3.13-slim
 RUN useradd -m -u 1000 user
 ENV HOME=/home/user \
     PATH=/home/user/.local/bin:$PATH \
-    HF_HOME=/home/user/.cache/huggingface \
+    FASTEMBED_CACHE_PATH=/home/user/.cache/fastembed \
     UV_LINK_MODE=copy \
     PYTHONUNBUFFERED=1 \
     EMBED_MODEL=sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2 \
@@ -35,7 +35,7 @@ COPY --chown=user pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
 # Baixa o modelo de embeddings na construção da imagem (evita baixar a cada partida).
-RUN uv run python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2')"
+RUN uv run --no-sync python -c "from fastembed import TextEmbedding; TextEmbedding('sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2')"
 
 COPY --chown=user src ./src
 COPY --chown=user --from=web /web/dist ./web/dist
