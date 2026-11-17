@@ -44,9 +44,10 @@ def ambiente(monkeypatch):
 
 
 def test_corpo_sem_choices_cai_para_o_proximo_modelo(ambiente):
-    cliente = ambiente({"padrao": SimpleNamespace(choices=None, usage=None), "leve": _resposta("ok do leve"), "forte": _resposta("x")})
+    cliente = ambiente({"padrao": SimpleNamespace(choices=None, usage=None), "forte": _resposta("ok do forte"), "leve": _resposta("x")})
     resultado = asyncio.run(llm.chat("standard", [{"role": "user", "content": "oi"}]))
-    assert resultado.text == "ok do leve"
+    assert resultado.text == "ok do forte"
+    assert cliente.modelos == ["padrao", "forte"]
     assert cliente.modelos[0] == "padrao"
     assert resultado.tier.name == "standard"
 

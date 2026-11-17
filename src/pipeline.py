@@ -197,8 +197,11 @@ async def process_message(
         )
 
     # 1. Pausa por atividade suspeita e limite de mensagens.
-    score = await asyncio.to_thread(limits.risk_score, usuario.usuario_id)
-    decision = await asyncio.to_thread(limits.message_decision, usuario.usuario_id)
+    # As duas consultas são independentes: em paralelo, a espera é a de uma ida ao banco só.
+    score, decision = await asyncio.gather(
+        asyncio.to_thread(limits.risk_score, usuario.usuario_id),
+        asyncio.to_thread(limits.message_decision, usuario.usuario_id),
+    )
     await stage("limites", pausado=risk_paused(score), pontos_de_risco=score, permitido=decision.allowed)
     if risk_paused(score):
         return await refuse(core.MSG_PAUSED, ("usuario_pausado",), 0, "usuario_pausado", "usuário pausado")

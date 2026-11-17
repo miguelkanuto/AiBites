@@ -5,12 +5,16 @@ preços de referência de cada faixa (US$ por 1 milhão de tokens), para mostrar
 efeito do roteamento sem gastar nada. Cada nível pode ser trocado por variável de ambiente.
 """
 
+import logging
 import os
+import time
 from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Any
 
 from openai import APIConnectionError, APITimeoutError, AsyncOpenAI, BadRequestError, InternalServerError, RateLimitError
+
+logger = logging.getLogger(__name__)
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
@@ -104,7 +108,9 @@ def get_client() -> AsyncOpenAI:
     api_key = os.getenv("OPENROUTER_API_KEY")
     if not api_key:
         raise RuntimeError("A variável de ambiente OPENROUTER_API_KEY não foi configurada.")
-    return AsyncOpenAI(base_url=OPENROUTER_BASE_URL, api_key=api_key, max_retries=2, timeout=60)
+    # Falha rápida: quem refaz a tentativa em outro modelo é `chat` (modelos gratuitos têm picos de fila de
+    # dezenas de segundos; esperar 60 s três vezes no mesmo modelo era o pior caso medido).
+    return AsyncOpenAI(base_url=OPENROUTER_BASE_URL, api_key=api_key, max_retries=1, timeout=30)
 
 
 async def chat(
@@ -165,14 +171,18 @@ async def chat(
         return response
 
     # Modelos gratuitos falham de vez em quando (limite, fila, erro do provedor): tenta os outros da lista.
-    candidates = [tier.model] + [t.model for t in get_tiers().values() if t.model != tier.model]
+    tiers = get_tiers()
+    candidates = list(dict.fromkeys([tier.model, tiers["standard"].model, tiers["strong"].model, tiers["light"].model]))
     last_error: Exception | None = None
     response = None
     for model in candidates:
+        started = time.perf_counter()
         try:
             response = await call(model)
+            logger.info("LLM %s respondeu em %.1fs", model, time.perf_counter() - started)
             break
         except (ProviderUnavailable, RateLimitError, APIConnectionError, APITimeoutError, InternalServerError) as error:
+            logger.warning("LLM %s falhou em %.1fs (%s)", model, time.perf_counter() - started, type(error).__name__)
             last_error = error
     if response is None:
         raise ProviderUnavailable("Nenhum modelo respondeu agora.") from last_error
