@@ -71,13 +71,13 @@ def test_documento_usa_tipo_de_documento():
     assert json.loads(chamadas[0].content)["requests"][0]["taskType"] == "RETRIEVAL_DOCUMENT"
 
 
-def test_lote_grande_e_dividido_em_chamadas_de_100():
+def test_lote_grande_e_dividido_em_chamadas_pequenas():
     modelo, chamadas = _modelo(_ok)
-    textos = [f"documento {i}" for i in range(250)]
+    textos = [f"documento {i}" for i in range(60)]
     vetores = modelo._get_text_embeddings(textos)
 
-    assert len(vetores) == 250
-    assert [len(json.loads(c.content)["requests"]) for c in chamadas] == [100, 100, 50]
+    assert len(vetores) == 60
+    assert [len(json.loads(c.content)["requests"]) for c in chamadas] == [embeddings.BATCH_SIZE, embeddings.BATCH_SIZE, 10]
 
 
 def test_mesma_consulta_repetida_so_chama_a_api_uma_vez():

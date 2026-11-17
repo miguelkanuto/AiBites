@@ -21,9 +21,9 @@ from llama_index.core.bridge.pydantic import Field, PrivateAttr
 API_BASE = "https://generativelanguage.googleapis.com/v1beta"
 DEFAULT_MODEL = "gemini-embedding-001"
 DEFAULT_DIM = 768
-BATCH_SIZE = 100  # limite de textos por chamada do batchEmbedContents
+BATCH_SIZE = 25  # textos por chamada: lotes menores não estouram a cota de tokens por minuto de uma vez
 QUERY_PATIENCE_S = 15.0  # uma pergunta não deve esperar muito por cota
-DOCUMENT_PATIENCE_S = 420.0  # a recriação do índice pode esperar a cota por minuto voltar
+DOCUMENT_PATIENCE_S = 900.0  # a recriação do índice pode esperar a cota por minuto voltar
 QUERY_CACHE_SIZE = 256
 RETRY_STATUS = {429, 500, 502, 503, 504}
 

@@ -18,13 +18,12 @@ from llama_index.core import (
     ChatPromptTemplate,
     Settings,
     Document,
-    StorageContext,
     VectorStoreIndex,
 )
 from llama_index.core.llms import ChatMessage, MessageRole
 from llama_index.core.query_engine import RetrieverQueryEngine
 from llama_index.core.retrievers import BaseRetriever
-from llama_index.core.schema import NodeWithScore, QueryBundle
+from llama_index.core.schema import MetadataMode, NodeWithScore, QueryBundle
 from llama_index.core.vector_stores import (
     FilterCondition,
     FilterOperator,
@@ -547,11 +546,18 @@ def rebuild_index() -> None:
     start = time.perf_counter()
     configure_llama_index()
     documents = load_documents()
-    vector_store = reset_vector_store()
-    VectorStoreIndex.from_documents(
-        documents,
-        storage_context=StorageContext.from_defaults(vector_store=vector_store),
+
+    # Os vetores são gerados ANTES de apagar a tabela: se o provedor de embeddings
+    # falhar ou ficar sem cota, o índice que já existe continua intacto.
+    nodes = Settings.node_parser.get_nodes_from_documents(documents)
+    vectors = create_embed_model().get_text_embedding_batch(
+        [node.get_content(metadata_mode=MetadataMode.EMBED) for node in nodes]
     )
+    for node, vector in zip(nodes, vectors, strict=True):
+        node.embedding = vector
+
+    vector_store = reset_vector_store()
+    vector_store.add(nodes)
     grant_read_to_app_role()
     write_index_metadata(get_index_metadata())
     logger.info(
