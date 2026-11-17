@@ -18,3 +18,8 @@ api:
 
 web:
 	cd web && npm run dev
+
+# Avaliação com casos reais contra um site em execução (gasta cota gratuita). Ex.: make eval URL=http://localhost:8001
+URL ?= http://localhost:8001
+eval:
+	uv run python evals/run.py --url $(URL)
