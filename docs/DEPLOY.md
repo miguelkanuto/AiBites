@@ -45,11 +45,24 @@ uv run python db/build_index.py
 Isso apaga e recria a tabela de vetores com o Gemini (alguns minutos por causa do limite por minuto da API).
 Rode depois de mudar dados ou o modelo de embeddings.
 
+## Cota do Gemini (medida, não suposta)
+
+A cota gratuita de embeddings é **por dia, por projeto do Google e por modelo**
+(`EmbedContentRequestsPerDayPerProjectPerModel-FreeTier`) e **cada texto de um lote conta como um pedido**.
+Recriar o índice custa um pedido por documento (564 hoje), mais da metade de um dia de cota. Por isso:
+
+- Use **uma chave em um projeto próprio para recriar o índice** (no seu computador) e **outra chave, em outro
+  projeto, no Render**, para o uso do site não competir com o rebuild. Em aistudio.google.com/apikey, crie cada
+  chave em um projeto novo.
+- Não rode a suíte de integração e o rebuild no mesmo dia com a mesma chave: os testes também consomem a cota.
+- O rebuild gera todos os vetores **antes** de apagar a tabela; se a cota acabar no meio, o índice antigo
+  continua no lugar. Se estourar a cota, o Google informa quando libera (`retryDelay`).
+
 ## Limites conhecidos (dizer na entrevista)
 
 - **Dependência de API:** cada pergunta chama o Gemini para gerar o vetor (o cache de consultas repetidas
   reduz isso). Se a cota gratuita acabar, o assistente avisa que a busca está indisponível em vez de inventar
-  uma resposta. Os limites exatos da cota gratuita não foram confirmados na página oficial.
+  uma resposta.
 - Os modelos do OpenRouter também são gratuitos e têm limite diário.
 - O login do site é por persona fictícia, sem senha. Os limites por visitante existem, mas qualquer pessoa
   pode usar o site.
