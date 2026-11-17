@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  testes:
+    name: Testes offline (sem segredos, sem banco, sem LLM)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --frozen
+      - name: Testes unitários e casos de avaliação offline
+        run: uv run pytest tests -q -m "not integration"
+
+  front:
+    name: Front-end compila
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+        working-directory: web
+      - run: npm run build
+        working-directory: web
+
+# A avaliação completa (evals/run.py) chama o modelo de verdade e consome a cota gratuita.
+# Ela roda sob demanda: Actions > Avaliação > Run workflow (veja avaliacao.yml).
