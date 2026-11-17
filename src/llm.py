@@ -10,9 +10,13 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Any
 
-from openai import AsyncOpenAI, BadRequestError
+from openai import APIConnectionError, APITimeoutError, AsyncOpenAI, BadRequestError, InternalServerError, RateLimitError
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+
+
+class ProviderUnavailable(RuntimeError):
+    """Nenhum modelo gratuito respondeu agora (limite, fila ou erro do provedor)."""
 
 # Modelos que recusam `reasoning: disabled` (descobertos na primeira chamada).
 _REASONING_REQUIRED: set[str] = set()
@@ -145,14 +149,33 @@ async def chat(
         extra = {"provider": {"sort": "latency"}, "reasoning": reasoning}
         return {**arguments, "extra_body": extra, **({"max_tokens": max(max_tokens, 1200)} if required else {})}
 
-    required = tier.model in _REASONING_REQUIRED
-    try:
-        response = await get_client().chat.completions.create(**with_reasoning(required))
-    except BadRequestError as error:
-        if required or "mandatory" not in str(error).lower():
-            raise
-        _REASONING_REQUIRED.add(tier.model)
-        response = await get_client().chat.completions.create(**with_reasoning(True))
+    async def call(model: str) -> Any:
+        arguments["model"] = model
+        required = model in _REASONING_REQUIRED
+        try:
+            response = await get_client().chat.completions.create(**with_reasoning(required))
+        except BadRequestError as error:
+            if required or "mandatory" not in str(error).lower():
+                raise
+            _REASONING_REQUIRED.add(model)
+            response = await get_client().chat.completions.create(**with_reasoning(True))
+        if not getattr(response, "choices", None):
+            # O OpenRouter às vezes devolve HTTP 200 com um erro do provedor no corpo.
+            raise ProviderUnavailable(f"Sem resposta do modelo {model}.")
+        return response
+
+    # Modelos gratuitos falham de vez em quando (limite, fila, erro do provedor): tenta os outros da lista.
+    candidates = [tier.model] + [t.model for t in get_tiers().values() if t.model != tier.model]
+    last_error: Exception | None = None
+    response = None
+    for model in candidates:
+        try:
+            response = await call(model)
+            break
+        except (ProviderUnavailable, RateLimitError, APIConnectionError, APITimeoutError, InternalServerError) as error:
+            last_error = error
+    if response is None:
+        raise ProviderUnavailable("Nenhum modelo respondeu agora.") from last_error
     usage = response.usage
     prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
     completion_tokens = getattr(usage, "completion_tokens", 0) or 0

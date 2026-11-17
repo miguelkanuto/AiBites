@@ -35,7 +35,7 @@ from sse_starlette.sse import EventSourceResponse
 import cache as semantic_cache
 from agent import ToolEvent
 from guardrails import check_input, redact
-from llm import estimate_cost, get_tiers, reference_cost
+from llm import ProviderUnavailable, estimate_cost, get_tiers, reference_cost
 from personas import BY_ID, PERSONAS, Persona
 from pipeline import ConversationState, Outcome, process_message
 from rbac import NIVEIS, NIVEIS_POR_PAPEL, Usuario, pode_ver
@@ -340,7 +340,12 @@ async def chat(body: ChatRequest, request: Request) -> EventSourceResponse:
                 await queue.put(("answer", outcome_json(outcome)))
             except Exception as error:
                 logger.exception("Erro ao processar a mensagem.")
-                await queue.put(("error", {"mensagem": "Algo deu errado ao processar a mensagem.", "tipo": type(error).__name__}))
+                mensagem = (
+                    "Os modelos gratuitos estão sobrecarregados agora. Tente de novo em instantes."
+                    if isinstance(error, ProviderUnavailable)
+                    else "Algo deu errado ao processar a mensagem."
+                )
+                await queue.put(("error", {"mensagem": mensagem, "tipo": type(error).__name__}))
             finally:
                 await queue.put(None)
 
