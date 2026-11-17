@@ -34,6 +34,8 @@ AGENT_RULES = (
     ("soma ou ranking de vendas", r"\b(total|soma|somar|media|ranking|faturamento|faturou|ticket medio)\b.{0,40}\b(vend|venda|vendas|vendido|vendedor|vendedores|categoria|regiao|mes)\b"),
     ("melhor ou maior vendedor", r"\b(maior|maiores|melhor|melhores|pior|piores|top)\b.{0,15}\b(vendedor|vendedora|vendedores)\b"),
     ("contagem de vendas", r"\bquantas vendas\b|\bquantas unidades\b"),
+    # "já vendemos algum celular?", "quantos notebooks foram vendidos?": contagem exata, não texto da base.
+    ("contagem de itens vendidos", r"\bquantos?\b.{0,40}\b(vendemos|vendeu|vendeu-se|vendido|vendidos|vendida|vendidas|vendi)\b|\bja\b.{0,15}\b(vendemos|vendeu|vendi)\b"),
 )
 _AGENT = tuple((label, re.compile(pattern)) for label, pattern in AGENT_RULES)
 

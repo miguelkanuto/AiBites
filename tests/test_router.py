@@ -30,6 +30,9 @@ def test_cumprimentos_vao_para_resposta_pronta(mensagem: str) -> None:
         "Faça um ranking de vendedores",
         "Quantas vendas foram feitas em março?",
         "Qual o faturamento da região Sul?",
+        "a gente ja vendeu algum celular ?",
+        "Quantos notebooks foram vendidos?",
+        "Quantos iPhones nós vendemos?",
     ],
 )
 def test_acoes_e_contas_exatas_vao_para_o_agente(mensagem: str) -> None:
