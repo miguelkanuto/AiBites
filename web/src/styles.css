@@ -366,3 +366,4 @@ tbody tr:hover { background: var(--paper); }
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
   .reveal { opacity: 1; transform: none; }
 }
+.footer-version { display: block; margin-top: 8px; font-variant-numeric: tabular-nums; opacity: 0.85; }

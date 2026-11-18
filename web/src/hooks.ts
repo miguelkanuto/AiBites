@@ -61,3 +61,56 @@ export function useTypewriter(parts: string[], startDelay = 700, speed = 22) {
 
   return typed;
 }
+
+const UPDATE_CHECK_MS = 60_000;
+const RELOAD_GUARD_KEY = "aibites:reload-at";
+
+/**
+ * Recarrega a página quando o servidor passa a servir outra versão ou outro deploy, para ninguém ficar
+ * com o site velho aberto. Confere a cada minuto e quando a aba volta ao primeiro plano. Se o servidor
+ * estiver fora do ar (reiniciando), não faz nada; só recarrega depois de uma resposta válida diferente.
+ */
+export function useAutoUpdate() {
+  useEffect(() => {
+    let current: string | null = null;
+    let stopped = false;
+
+    const check = async () => {
+      try {
+        const response = await fetch("/api/health", { cache: "no-store" });
+        if (!response.ok) return;
+        const data = (await response.json()) as { versao?: string; build?: string };
+        if (stopped || !data.versao) return;
+        const id = `${data.versao}+${data.build ?? ""}`;
+        if (current === null) {
+          current = id;
+          return;
+        }
+        if (id === current) return;
+        // Trava contra laço de recarga (por exemplo, dois servidores com builds diferentes atrás do balanceador).
+        let last = 0;
+        try {
+          last = Number(sessionStorage.getItem(RELOAD_GUARD_KEY) ?? 0);
+          sessionStorage.setItem(RELOAD_GUARD_KEY, String(Date.now()));
+        } catch {
+          /* sessionStorage indisponível: segue sem a trava */
+        }
+        if (Date.now() - last > 30_000) window.location.reload();
+      } catch {
+        /* sem rede ou servidor reiniciando: tenta de novo na próxima checagem */
+      }
+    };
+
+    void check();
+    const timer = window.setInterval(check, UPDATE_CHECK_MS);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void check();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, []);
+}

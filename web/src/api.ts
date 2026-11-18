@@ -46,7 +46,7 @@ export type Answer = {
 
 export type Confirm = { id: string; resumo: string; expira_em: number };
 
-export type Health = { ok: boolean; pronto: boolean; index: boolean; tools: boolean; error: string; demo: boolean };
+export type Health = { ok: boolean; pronto: boolean; index: boolean; tools: boolean; error: string; demo: boolean; versao?: string; build?: string };
 
 export class ApiError extends Error {
   constructor(

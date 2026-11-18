@@ -8,6 +8,7 @@ import { Chat } from "./components/Chat";
 import { Footer, Home } from "./components/Home";
 import type { Tab } from "./components/Home";
 import { Inspector } from "./components/Inspector";
+import { useAutoUpdate } from "./hooks";
 import { Lab } from "./components/Lab";
 import { Metrics } from "./components/Metrics";
 
@@ -117,6 +118,8 @@ export default function App() {
   const [health, setHealth] = useState<Health | null>(null);
   const [lastAnswer, setLastAnswer] = useState<Answer | null>(null);
 
+  useAutoUpdate();
+
   const go = useCallback((next: Tab, persona?: string) => {
     setPersonaId(persona);
     setTab(next);
@@ -179,7 +182,7 @@ export default function App() {
       {tab === "arquitetura" && <Architecture answer={lastAnswer} />}
       {tab === "metricas" && <Metrics />}
 
-      <Footer />
+      <Footer versao={health?.versao} />
     </div>
   );
 }

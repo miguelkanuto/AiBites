@@ -250,7 +250,7 @@ function CallToAction({ go }: Props) {
   );
 }
 
-export function Footer() {
+export function Footer({ versao }: { versao?: string }) {
   return (
     <footer className="site-footer">
       <div className="container footer-grid">
@@ -263,6 +263,7 @@ export function Footer() {
         </div>
         <p className="footer-note">
           Fotos de produtos: Unsplash (licença gratuita). Ilustrações, ícones e logo desenhados para este projeto.
+          {versao && <span className="footer-version"> Versão {versao}</span>}
         </p>
       </div>
     </footer>
