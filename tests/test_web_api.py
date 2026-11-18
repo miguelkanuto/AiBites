@@ -318,3 +318,15 @@ def test_saude_informa_o_estado_do_carregamento(client, monkeypatch) -> None:
     assert client.get("/api/health").json()["pronto"] is False
     monkeypatch.setitem(web_api.READY, "index", True)
     assert client.get("/api/health").json()["pronto"] is True
+
+
+def test_saude_informa_versao_e_build(client) -> None:
+    from version import VERSION
+
+    dados = client.get("/api/health").json()
+    assert dados["versao"] == VERSION
+    assert dados["build"]
+
+
+def test_api_nao_fica_em_cache_para_o_site_nao_ficar_velho(client) -> None:
+    assert client.get("/api/health").headers["cache-control"] == "no-cache"

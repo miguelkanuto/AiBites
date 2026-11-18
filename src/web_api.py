@@ -40,6 +40,7 @@ from personas import BY_ID, PERSONAS, Persona
 from pipeline import ConversationState, Outcome, process_message
 from rbac import NIVEIS, NIVEIS_POR_PAPEL, Usuario, pode_ver
 from router import route
+from version import VERSION, build_id
 from tool_policy import FERRAMENTAS, canais_permitidos, exige_confirmacao, ferramentas_permitidas, pode_usar
 
 logger = logging.getLogger("web_api")
@@ -276,7 +277,10 @@ class SiteHooks:
 @app.get("/api/health")
 async def health() -> dict[str, Any]:
     """Estado da inicialização (o primeiro carregamento leva ~40 s)."""
-    return {"ok": True, "pronto": READY["index"] and READY["tools"], **READY, "demo": demo_enabled(), "sessoes": len(SESSIONS)}
+    return {
+        "ok": True, "pronto": READY["index"] and READY["tools"], **READY, "demo": demo_enabled(),
+        "sessoes": len(SESSIONS), "versao": VERSION, "build": build_id(),
+    }
 
 
 @app.get("/api/personas")
@@ -515,6 +519,17 @@ async def metrics() -> dict[str, Any]:
 
 
 # --- Site estático (build do React), por último para não esconder a API ---
+
+@app.middleware("http")
+async def sem_cache_no_que_muda(request: Request, call_next):
+    """A página (index.html) e a API nunca ficam em cache: quem abre o site recebe sempre a versão atual.
+    Os arquivos em /assets têm hash no nome e podem ficar em cache.
+    """
+    response = await call_next(request)
+    if not request.url.path.startswith("/assets/"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
+
 
 if WEB_DIST.exists():
     app.mount("/", StaticFiles(directory=WEB_DIST, html=True), name="site")
