@@ -72,3 +72,13 @@ Recriar o índice custa um pedido por documento (564 hoje), mais da metade de um
 - Os "bancos" de RH, TI e Slack são arquivos locais efêmeros e fictícios.
 - Sem o manifesto local do índice, a versão usada pelo cache semântico fica vazia no servidor público:
   o cache não é invalidado sozinho quando os dados mudam (limpe `cache_semantico` ao recriar o índice).
+
+## Mudar o endereço do site
+
+O endereço `*.onrender.com` vem do nome do serviço na criação. Para trocar sem perder quem já tem o link:
+
+1. Em outra conta do Render (cada conta tem as próprias horas gratuitas), **New > Blueprint** neste repositório: o
+   `render.yaml` cria o serviço `aibites`. Preencha os segredos pedidos (os mesmos do serviço antigo, menos a credencial de dono).
+2. Ligue o cron job de `/api/health` também no endereço novo.
+3. No serviço **antigo**, cadastre `AIBITES_CANONICAL_HOST=aibites.onrender.com`: o link velho passa a redirecionar (301)
+   para o novo, menos `/api/health`. Mantenha o antigo ligado enquanto o link velho circular; depois apague-o.
