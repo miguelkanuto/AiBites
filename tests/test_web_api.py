@@ -330,3 +330,22 @@ def test_saude_informa_versao_e_build(client) -> None:
 
 def test_api_nao_fica_em_cache_para_o_site_nao_ficar_velho(client) -> None:
     assert client.get("/api/health").headers["cache-control"] == "no-cache"
+
+
+def test_endereco_antigo_redireciona_para_o_novo(client, monkeypatch) -> None:
+    monkeypatch.setenv("AIBITES_CANONICAL_HOST", "aibites.onrender.com")
+    r = client.get("/api/personas?x=1", headers={"host": "rag-ex.onrender.com"}, follow_redirects=False)
+    assert r.status_code == 301
+    assert r.headers["location"] == "https://aibites.onrender.com/api/personas?x=1"
+
+
+def test_redirecionamento_poupa_a_saude_o_endereco_novo_e_o_local(client, monkeypatch) -> None:
+    monkeypatch.setenv("AIBITES_CANONICAL_HOST", "aibites.onrender.com")
+    assert client.get("/api/health", headers={"host": "rag-ex.onrender.com"}, follow_redirects=False).status_code == 200
+    assert client.get("/api/personas", headers={"host": "aibites.onrender.com"}, follow_redirects=False).status_code == 200
+    assert client.get("/api/personas", headers={"host": "localhost:8001"}, follow_redirects=False).status_code == 200
+
+
+def test_sem_a_variavel_nao_redireciona(client, monkeypatch) -> None:
+    monkeypatch.delenv("AIBITES_CANONICAL_HOST", raising=False)
+    assert client.get("/api/personas", headers={"host": "rag-ex.onrender.com"}, follow_redirects=False).status_code == 200

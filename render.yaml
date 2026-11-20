@@ -1,0 +1,24 @@
+# Blueprint do Render: New > Blueprint, apontando para este repositório.
+# Os segredos ficam como `sync: false`: o Render pergunta o valor na criação. Nenhum valor mora aqui.
+# NUNCA cadastre AIBITES_ADMIN_DATABASE_URL (credencial de dono do banco) no servidor público.
+services:
+  - type: web
+    name: aibites
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: OPENROUTER_MODEL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: AIBITES_DATABASE_URL
+        sync: false
+      - key: CHAINLIT_AUTH_SECRET
+        generateValue: true
+      - key: SITE_SESSION_SECRET
+        generateValue: true
+      - key: MCP_CONTEXT_SECRET
+        generateValue: true

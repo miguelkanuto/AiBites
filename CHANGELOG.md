@@ -2,6 +2,9 @@
 
 Versionamento semântico: MAIOR.MENOR.CORREÇÃO. A versão aparece no rodapé do site e em `/api/health`.
 
+## 1.0.2
+- Redirecionamento do endereço antigo para o novo (`AIBITES_CANONICAL_HOST`) e `render.yaml` para recriar o serviço.
+
 ## 1.0.1
 - Troca automática para outro modelo gratuito quando um falha; falha rápida (30 s) em vez de esperar 60 s.
 - Contagens de itens vendidos ("já vendemos X?") passam pelo agente com SQL.

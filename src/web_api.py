@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sqlalchemy import text
@@ -519,6 +520,20 @@ async def metrics() -> dict[str, Any]:
 
 
 # --- Site estático (build do React), por último para não esconder a API ---
+
+@app.middleware("http")
+async def redirecionar_para_o_endereco_novo(request: Request, call_next):
+    """Com `AIBITES_CANONICAL_HOST` definido (no serviço antigo), quem abre o endereço velho vai para o novo.
+
+    Redirecionamento permanente (301), mantendo caminho e consulta. `/api/health` fica de fora para os
+    monitores do serviço antigo continuarem funcionando. Sem a variável, não faz nada.
+    """
+    destino = os.getenv("AIBITES_CANONICAL_HOST", "").strip().lower()
+    host = request.headers.get("host", "").split(":")[0].lower()
+    if destino and host and host != destino and request.url.path != "/api/health" and host.endswith(".onrender.com"):
+        return RedirectResponse(f"https://{destino}{request.url.path}" + (f"?{request.url.query}" if request.url.query else ""), status_code=301)
+    return await call_next(request)
+
 
 @app.middleware("http")
 async def sem_cache_no_que_muda(request: Request, call_next):
